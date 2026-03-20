@@ -7,22 +7,21 @@
 #include <cstring>
 #include <vector>
 
-#include "krymova_k_lsd_sort_merge_double/common/include/common.hpp"
-#include "krymova_k_lsd_sort_merge_double/omp/include/ops_omp.hpp"
-
 namespace krymova_k_lsd_sort_merge_double {
 
-KrymovaKLsdSortMergeDoubleOMP::KrymovaKLsdSortMergeDoubleOMP(const InType &in) : num_threads_(omp_get_max_threads()) {
+KrymovaKLsdSortMergeDoubleOMP::KrymovaKLsdSortMergeDoubleOMP(const InType &in) {
   SetTypeOfTask(GetStaticTypeOfTask());
   GetInput() = in;
   GetOutput() = OutType();
+  num_threads_ = omp_get_max_threads();
 }
 
 bool KrymovaKLsdSortMergeDoubleOMP::ValidationImpl() {
-  return true;
+  return !GetInput().empty();
 }
 
 bool KrymovaKLsdSortMergeDoubleOMP::PreProcessingImpl() {
+  GetOutput() = GetInput();
   return true;
 }
 
@@ -63,61 +62,34 @@ void KrymovaKLsdSortMergeDoubleOMP::LSDSortDouble(double *arr, int size) {
   std::vector<uint64_t> ull_arr(size);
   std::vector<uint64_t> ull_tmp(size);
 
-#pragma omp parallel for default(none) shared(arr, ull_arr, size)
   for (int i = 0; i < size; ++i) {
     ull_arr[i] = DoubleToULL(arr[i]);
   }
 
-  std::vector<unsigned int> global_count(k_radix, 0U);
+  std::vector<unsigned int> count(k_radix, 0U);
 
   for (int pass = 0; pass < k_passes; ++pass) {
     int shift = pass * k_bits_per_pass;
 
-    std::ranges::fill(global_count, 0U);
+    std::fill(count.begin(), count.end(), 0U);
 
-#pragma omp parallel default(none) shared(global_count, size, ull_arr, shift)
-    {
-      std::vector<unsigned int> local_count(k_radix, 0U);
-
-#pragma omp for nowait
-      for (int i = 0; i < size; ++i) {
-        unsigned int digit = (ull_arr[i] >> shift) & (k_radix - 1);
-        ++local_count[digit];
-      }
-
-#pragma omp critical
-      for (int i = 0; i < k_radix; ++i) {
-        global_count[i] += local_count[i];
-      }
+    for (int i = 0; i < size; ++i) {
+      unsigned int digit = (ull_arr[i] >> shift) & (k_radix - 1);
+      ++count[digit];
     }
 
     for (int i = 1; i < k_radix; ++i) {
-      global_count[i] += global_count[i - 1];
+      count[i] += count[i - 1];
     }
 
-    std::vector<unsigned int> pos(k_radix);
-    std::ranges::copy(global_count, pos.begin());
-
-#pragma omp parallel default(none) shared(ull_arr, ull_tmp, pos, shift, size)
-    {
-      int thread_id = omp_get_thread_num();
-      int num_threads = omp_get_num_threads();
-
-      int chunk_size = size / num_threads;
-      int start = thread_id * chunk_size;
-      int end = (thread_id == num_threads - 1) ? size : start + chunk_size;
-
-      for (int i = end - 1; i >= start; --i) {
-        unsigned int digit = (ull_arr[i] >> shift) & (k_radix - 1);
-        int idx = static_cast<int>(--pos[digit]);
-        ull_tmp[idx] = ull_arr[i];
-      }
+    for (int i = size - 1; i >= 0; --i) {
+      unsigned int digit = (ull_arr[i] >> shift) & (k_radix - 1);
+      ull_tmp[--count[digit]] = ull_arr[i];
     }
 
     ull_arr.swap(ull_tmp);
   }
 
-#pragma omp parallel for default(none) shared(arr, ull_arr, size)
   for (int i = 0; i < size; ++i) {
     arr[i] = ULLToDouble(ull_arr[i]);
   }
@@ -125,7 +97,7 @@ void KrymovaKLsdSortMergeDoubleOMP::LSDSortDouble(double *arr, int size) {
 
 void KrymovaKLsdSortMergeDoubleOMP::MergeSections(double *left, const double *right, int left_size, int right_size) {
   std::vector<double> temp(left_size);
-  std::ranges::copy(left, left + left_size, temp.begin());
+  std::copy(left, left + left_size, temp.begin());
 
   int l = 0;
   int r = 0;
@@ -145,7 +117,7 @@ void KrymovaKLsdSortMergeDoubleOMP::MergeSections(double *left, const double *ri
 }
 
 void KrymovaKLsdSortMergeDoubleOMP::SortSectionsParallel(double *arr, int size, int portion) {
-#pragma omp parallel for default(none) shared(arr, size, portion)
+#pragma omp parallel for
   for (int i = 0; i < size; i += portion) {
     int current_size = std::min(portion, size - i);
     LSDSortDouble(arr + i, current_size);
@@ -184,8 +156,8 @@ bool KrymovaKLsdSortMergeDoubleOMP::RunImpl() {
     return true;
   }
 
-  int portion = std::max(1, size / (num_threads_ * 4));
-  portion = std::min(portion, 10000);
+  int portion = std::max(1, size / (num_threads_ * 2));
+  portion = std::min(portion, 5000);
 
   IterativeMergeSort(output.data(), size, portion);
 
