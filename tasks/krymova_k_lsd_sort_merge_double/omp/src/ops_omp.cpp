@@ -9,11 +9,10 @@
 
 namespace krymova_k_lsd_sort_merge_double {
 
-KrymovaKLsdSortMergeDoubleOMP::KrymovaKLsdSortMergeDoubleOMP(const InType &in) {
+KrymovaKLsdSortMergeDoubleOMP::KrymovaKLsdSortMergeDoubleOMP(const InType &in) : num_threads_(omp_get_max_threads()) {
   SetTypeOfTask(GetStaticTypeOfTask());
   GetInput() = in;
   GetOutput() = OutType();
-  num_threads_ = omp_get_max_threads();
 }
 
 bool KrymovaKLsdSortMergeDoubleOMP::ValidationImpl() {
@@ -71,7 +70,7 @@ void KrymovaKLsdSortMergeDoubleOMP::LSDSortDouble(double *arr, int size) {
   for (int pass = 0; pass < k_passes; ++pass) {
     int shift = pass * k_bits_per_pass;
 
-    std::fill(count.begin(), count.end(), 0U);
+    std::ranges::fill(count, 0U);
 
     for (int i = 0; i < size; ++i) {
       unsigned int digit = (ull_arr[i] >> shift) & (k_radix - 1);
@@ -97,7 +96,7 @@ void KrymovaKLsdSortMergeDoubleOMP::LSDSortDouble(double *arr, int size) {
 
 void KrymovaKLsdSortMergeDoubleOMP::MergeSections(double *left, const double *right, int left_size, int right_size) {
   std::vector<double> temp(left_size);
-  std::copy(left, left + left_size, temp.begin());
+  std::ranges::copy(left, left + left_size, temp.begin());
 
   int l = 0;
   int r = 0;
@@ -117,7 +116,7 @@ void KrymovaKLsdSortMergeDoubleOMP::MergeSections(double *left, const double *ri
 }
 
 void KrymovaKLsdSortMergeDoubleOMP::SortSectionsParallel(double *arr, int size, int portion) {
-#pragma omp parallel for
+#pragma omp parallel for default(none) shared(arr, size, portion)
   for (int i = 0; i < size; i += portion) {
     int current_size = std::min(portion, size - i);
     LSDSortDouble(arr + i, current_size);
