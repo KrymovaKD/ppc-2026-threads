@@ -6,7 +6,6 @@
 #include "krymova_k_lsd_sort_merge_double/common/include/common.hpp"
 #include "krymova_k_lsd_sort_merge_double/omp/include/ops_omp.hpp"
 #include "krymova_k_lsd_sort_merge_double/seq/include/ops_seq.hpp"
-
 #include "util/include/perf_test_util.hpp"
 
 namespace krymova_k_lsd_sort_merge_double {
