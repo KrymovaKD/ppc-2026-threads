@@ -7,6 +7,8 @@
 #include <cstring>
 #include <vector>
 
+#include "krymova_k_lsd_sort_merge_double/common/include/common.hpp"
+
 namespace krymova_k_lsd_sort_merge_double {
 
 KrymovaKLsdSortMergeDoubleOMP::KrymovaKLsdSortMergeDoubleOMP(const InType &in) : num_threads_(omp_get_max_threads()) {
