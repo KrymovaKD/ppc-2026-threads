@@ -1,4 +1,6 @@
-#include "krymova_k_lsd_sort_merge_double/seq/include/ops_seq.hpp"
+#include "krymova_k_lsd_sort_merge_double/omp/include/ops_omp.hpp"
+
+#include <omp.h>
 
 #include <algorithm>
 #include <cstdint>
@@ -9,22 +11,22 @@
 
 namespace krymova_k_lsd_sort_merge_double {
 
-KrymovaKLsdSortMergeDoubleSEQ::KrymovaKLsdSortMergeDoubleSEQ(const InType &in) {
+KrymovaKLsdSortMergeDoubleOMP::KrymovaKLsdSortMergeDoubleOMP(const InType &in) : num_threads_(omp_get_max_threads()) {
   SetTypeOfTask(GetStaticTypeOfTask());
   GetInput() = in;
   GetOutput() = OutType();
 }
 
-bool KrymovaKLsdSortMergeDoubleSEQ::ValidationImpl() {
+bool KrymovaKLsdSortMergeDoubleOMP::ValidationImpl() {
   return !GetInput().empty();
 }
 
-bool KrymovaKLsdSortMergeDoubleSEQ::PreProcessingImpl() {
+bool KrymovaKLsdSortMergeDoubleOMP::PreProcessingImpl() {
   GetOutput() = GetInput();
   return true;
 }
 
-uint64_t KrymovaKLsdSortMergeDoubleSEQ::DoubleToULL(double d) {
+uint64_t KrymovaKLsdSortMergeDoubleOMP::DoubleToULL(double d) {
   uint64_t ull = 0;
   std::memcpy(&ull, &d, sizeof(double));
 
@@ -37,7 +39,7 @@ uint64_t KrymovaKLsdSortMergeDoubleSEQ::DoubleToULL(double d) {
   return ull;
 }
 
-double KrymovaKLsdSortMergeDoubleSEQ::ULLToDouble(uint64_t ull) {
+double KrymovaKLsdSortMergeDoubleOMP::ULLToDouble(uint64_t ull) {
   if ((ull & 0x8000000000000000ULL) != 0U) {
     ull &= 0x7FFFFFFFFFFFFFFFULL;
   } else {
@@ -49,7 +51,7 @@ double KrymovaKLsdSortMergeDoubleSEQ::ULLToDouble(uint64_t ull) {
   return d;
 }
 
-void KrymovaKLsdSortMergeDoubleSEQ::LSDSortDouble(double *arr, int size) {
+void KrymovaKLsdSortMergeDoubleOMP::LSDSortDouble(double *arr, int size) {
   if (size <= 1) {
     return;
   }
@@ -94,7 +96,7 @@ void KrymovaKLsdSortMergeDoubleSEQ::LSDSortDouble(double *arr, int size) {
   }
 }
 
-void KrymovaKLsdSortMergeDoubleSEQ::MergeSections(double *left, const double *right, int left_size, int right_size) {
+void KrymovaKLsdSortMergeDoubleOMP::MergeSections(double *left, const double *right, int left_size, int right_size) {
   std::vector<double> temp(left_size);
   std::ranges::copy(left, left + left_size, temp.begin());
 
@@ -115,38 +117,40 @@ void KrymovaKLsdSortMergeDoubleSEQ::MergeSections(double *left, const double *ri
   }
 }
 
-void KrymovaKLsdSortMergeDoubleSEQ::SortSections(double *arr, int size, int portion) {
-  for (int i = 0; i < size; i += portion) {
-    int current_size = std::min(portion, size - i);
-    LSDSortDouble(arr + i, current_size);
+void KrymovaKLsdSortMergeDoubleOMP::SortSectionsParallel(double *arr, int size, int portion) {
+#pragma omp parallel for default(none) shared(arr, size, portion)
+  for (int block_start = 0; block_start < size; block_start += portion) {
+    int current_size = std::min(portion, size - block_start);
+    LSDSortDouble(arr + block_start, current_size);
   }
 }
 
-void KrymovaKLsdSortMergeDoubleSEQ::IterativeMergeSort(double *arr, int size, int portion) {
+void KrymovaKLsdSortMergeDoubleOMP::IterativeMergeSort(double *arr, int size, int portion) {
   if (size <= 1) {
     return;
   }
 
-  SortSections(arr, size, portion);
+  SortSectionsParallel(arr, size, portion);
 
   for (int merge_size = portion; merge_size < size; merge_size *= 2) {
-    for (int i = 0; i < size; i += 2 * merge_size) {
+#pragma omp parallel for default(none) shared(arr, size, merge_size)
+    for (int pair_start = 0; pair_start < size; pair_start += 2 * merge_size) {
       int left_size = merge_size;
-      int right_size = std::min(merge_size, size - (i + merge_size));
+      int right_size = std::min(merge_size, size - (pair_start + merge_size));
 
       if (right_size <= 0) {
         continue;
       }
 
-      double *left = arr + i;
-      const double *right = arr + i + left_size;
+      double *left = arr + pair_start;
+      const double *right = arr + pair_start + left_size;
 
       MergeSections(left, right, left_size, right_size);
     }
   }
 }
 
-bool KrymovaKLsdSortMergeDoubleSEQ::RunImpl() {
+bool KrymovaKLsdSortMergeDoubleOMP::RunImpl() {
   OutType &output = GetOutput();
   int size = static_cast<int>(output.size());
 
@@ -154,13 +158,15 @@ bool KrymovaKLsdSortMergeDoubleSEQ::RunImpl() {
     return true;
   }
 
-  int portion = std::max(1, size / 10);
+  int portion = std::max(1, size / num_threads_);
+  portion = std::min(portion, 1000000);
+
   IterativeMergeSort(output.data(), size, portion);
 
   return true;
 }
 
-bool KrymovaKLsdSortMergeDoubleSEQ::PostProcessingImpl() {
+bool KrymovaKLsdSortMergeDoubleOMP::PostProcessingImpl() {
   const OutType &output = GetOutput();
 
   for (size_t i = 1; i < output.size(); ++i) {
