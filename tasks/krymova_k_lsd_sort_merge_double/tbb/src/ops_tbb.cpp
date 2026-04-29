@@ -7,6 +7,9 @@
 #include <algorithm>
 #include <cstdint>
 #include <cstring>
+#include <vector>
+
+#include "krymova_k_lsd_sort_merge_double/common/include/common.hpp"
 
 namespace krymova_k_lsd_sort_merge_double {
 
@@ -72,7 +75,7 @@ void KrymovaKLsdSortMergeDoubleTBB::LSDSortDouble(double *arr, int size) {
   for (int pass = 0; pass < k_passes; ++pass) {
     int shift = pass * k_bits_per_pass;
 
-    std::fill(count.begin(), count.end(), 0U);
+    std::ranges::fill(count, 0U);
 
     for (int i = 0; i < size; ++i) {
       unsigned int digit = (ull_arr[i] >> shift) & (k_radix - 1);
@@ -98,7 +101,7 @@ void KrymovaKLsdSortMergeDoubleTBB::LSDSortDouble(double *arr, int size) {
 
 void KrymovaKLsdSortMergeDoubleTBB::MergeSections(double *left, const double *right, int left_size, int right_size) {
   std::vector<double> temp(left_size);
-  std::copy(left, left + left_size, temp.begin());
+  std::ranges::copy(left, left + left_size, temp.begin());
 
   int left_index = 0;
   int right_index = 0;

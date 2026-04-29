@@ -96,22 +96,22 @@ void KrymovaKLsdSortMergeDoubleSEQ::LSDSortDouble(double *arr, int size) {
 
 void KrymovaKLsdSortMergeDoubleSEQ::MergeSections(double *left, const double *right, int left_size, int right_size) {
   std::vector<double> temp(left_size);
-  std::copy(left, left + left_size, temp.begin());
+  std::ranges::copy(left, left + left_size, temp.begin());
 
-  int l = 0;
-  int r = 0;
-  int k = 0;
+  int left_index = 0;
+  int right_index = 0;
+  int dest_index = 0;
 
-  while (l < left_size && r < right_size) {
-    if (temp[l] <= right[r]) {
-      left[k++] = temp[l++];
+  while (left_index < left_size && right_index < right_size) {
+    if (temp[left_index] <= right[right_index]) {
+      left[dest_index++] = temp[left_index++];
     } else {
-      left[k++] = right[r++];
+      left[dest_index++] = right[right_index++];
     }
   }
 
-  while (l < left_size) {
-    left[k++] = temp[l++];
+  while (left_index < left_size) {
+    left[dest_index++] = temp[left_index++];
   }
 }
 
@@ -155,7 +155,7 @@ bool KrymovaKLsdSortMergeDoubleSEQ::RunImpl() {
   }
 
   int portion = std::max(1, size / 10);
-  IterativeMergeSort(output.data(), size, portion);  // без tmp
+  IterativeMergeSort(output.data(), size, portion);
 
   return true;
 }
