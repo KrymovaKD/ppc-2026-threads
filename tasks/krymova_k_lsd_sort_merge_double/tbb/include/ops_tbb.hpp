@@ -1,7 +1,6 @@
 #pragma once
 
 #include <cstdint>
-#include <vector>
 
 #include "krymova_k_lsd_sort_merge_double/common/include/common.hpp"
 #include "task/include/task.hpp"
