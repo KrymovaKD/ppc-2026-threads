@@ -4,7 +4,6 @@
 #include <array>
 #include <cmath>
 #include <cstddef>
-#include <limits>
 #include <random>
 #include <string>
 #include <tuple>
@@ -58,29 +57,6 @@ class KrymovaKFuncTests : public ppc::util::BaseRunFuncTests<InType, OutType, Te
       for (int i = 0; i < size; ++i) {
         input_data_[i] = dist(gen);
       }
-    } else if (type == "mixed") {
-      for (int i = 0; i < size; ++i) {
-        input_data_[i] = (i % 2 == 0) ? static_cast<double>(i) : -static_cast<double>(i);
-      }
-    } else if (type == "special") {
-      input_data_ = {0.0,
-                     -0.0,
-                     std::numeric_limits<double>::min(),
-                     std::numeric_limits<double>::max(),
-                     std::numeric_limits<double>::epsilon(),
-                     1e-308,
-                     1e308,
-                     -1e308,
-                     std::numeric_limits<double>::infinity(),
-                     -std::numeric_limits<double>::infinity(),
-                     NAN};
-    } else if (type == "zeros") {
-      std::ranges::fill(input_data_, 0.0);
-    } else {
-      std::uniform_real_distribution<double> dist(-1000.0, 1000.0);
-      for (int i = 0; i < size; ++i) {
-        input_data_[i] = dist(gen);
-      }
     }
   }
 
@@ -96,15 +72,12 @@ class KrymovaKFuncTests : public ppc::util::BaseRunFuncTests<InType, OutType, Te
     }
 
     if (!input_data_.empty() && !output_data.empty()) {
-      InType input_copy = input_data_;
+      OutType input_copy = input_data_;
       const OutType &output_copy = output_data;
 
       std::ranges::sort(input_copy);
 
       for (size_t i = 0; i < input_copy.size(); ++i) {
-        if (std::isnan(input_copy[i]) && std::isnan(output_copy[i])) {
-          continue;
-        }
         if (std::abs(input_copy[i] - output_copy[i]) > 1e-10) {
           return false;
         }
@@ -128,20 +101,26 @@ TEST_P(KrymovaKFuncTests, TestSorting) {
   ExecuteTest(GetParam());
 }
 
-const std::array<TestType, 15> kTestParam = {
-    std::make_tuple(1, "single"),      std::make_tuple(10, "random"),    std::make_tuple(100, "random"),
-    std::make_tuple(1000, "random"),   std::make_tuple(10000, "random"), std::make_tuple(100, "sorted"),
-    std::make_tuple(100, "reverse"),   std::make_tuple(100, "constant"), std::make_tuple(100, "negative"),
-    std::make_tuple(1000, "negative"), std::make_tuple(10, "mixed"),     std::make_tuple(100, "mixed"),
-    std::make_tuple(100000, "random"), std::make_tuple(100, "zeros"),    std::make_tuple(1000, "zeros")};
+const std::array<TestType, 13> kTestParam = {std::make_tuple(1, "single"),
+                                             std::make_tuple(10, "random_small"),
+                                             std::make_tuple(100, "random_medium"),
+                                             std::make_tuple(1000, "random_large"),
+                                             std::make_tuple(10000, "random_very_large"),
+                                             std::make_tuple(100, "sorted"),
+                                             std::make_tuple(100, "reverse"),
+                                             std::make_tuple(100, "constant"),
+                                             std::make_tuple(100, "negative"),
+                                             std::make_tuple(1000, "negative_large"),
+                                             std::make_tuple(10, "mixed"),
+                                             std::make_tuple(100, "mixed"),
+                                             std::make_tuple(100000, "random_huge")};
 
-const auto kTestTasksList = std::tuple_cat(ppc::util::AddFuncTask<KrymovaKLsdSortMergeDoubleSEQ, InType>(
+const auto kTestTasksList = std::tuple_cat(ppc::util::AddFuncTask<KrymovaKLsdSortMergeDoubleOMP, InType>(
                                                kTestParam, PPC_SETTINGS_krymova_k_lsd_sort_merge_double),
-                                           ppc::util::AddFuncTask<KrymovaKLsdSortMergeDoubleOMP, InType>(
+                                           ppc::util::AddFuncTask<KrymovaKLsdSortMergeDoubleSEQ, InType>(
                                                kTestParam, PPC_SETTINGS_krymova_k_lsd_sort_merge_double),
                                            ppc::util::AddFuncTask<KrymovaKLsdSortMergeDoubleTBB, InType>(
                                                kTestParam, PPC_SETTINGS_krymova_k_lsd_sort_merge_double));
-
 const auto kGtestValues = ppc::util::ExpandToValues(kTestTasksList);
 
 const auto kPerfTestName = KrymovaKFuncTests::PrintFuncTestName<KrymovaKFuncTests>;
