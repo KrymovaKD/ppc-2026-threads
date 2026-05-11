@@ -123,9 +123,9 @@ void KrymovaKLsdSortMergeDoubleSTL::LSDSortDoubleSequential(double *arr, int siz
     return;
   }
 
-  const int k_bits_per_pass = 8;
-  const int k_radix = 1 << k_bits_per_pass;
-  const int k_passes = static_cast<int>(sizeof(double)) * 8 / k_bits_per_pass;
+  const int kBitsPerPass = 8;
+  const int kRadix = 1 << kBitsPerPass;
+  const int kPasses = static_cast<int>(sizeof(double)) * 8 / kBitsPerPass;
 
   std::vector<uint64_t> ull_arr(size);
   std::vector<uint64_t> ull_tmp(size);
@@ -134,24 +134,24 @@ void KrymovaKLsdSortMergeDoubleSTL::LSDSortDoubleSequential(double *arr, int siz
     ull_arr[i] = DoubleToULL(arr[i]);
   }
 
-  std::vector<unsigned int> count(k_radix, 0U);
+  std::vector<unsigned int> count(kRadix, 0U);
 
-  for (int pass = 0; pass < k_passes; ++pass) {
-    int shift = pass * k_bits_per_pass;
+  for (int pass = 0; pass < kPasses; ++pass) {
+    int shift = pass * kBitsPerPass;
 
     std::fill(count.begin(), count.end(), 0U);
 
     for (int i = 0; i < size; ++i) {
-      unsigned int digit = (ull_arr[i] >> shift) & (k_radix - 1);
+      unsigned int digit = (ull_arr[i] >> shift) & (kRadix - 1);
       ++count[digit];
     }
 
-    for (int i = 1; i < k_radix; ++i) {
+    for (int i = 1; i < kRadix; ++i) {
       count[i] += count[i - 1];
     }
 
     for (int i = size - 1; i >= 0; --i) {
-      unsigned int digit = (ull_arr[i] >> shift) & (k_radix - 1);
+      unsigned int digit = (ull_arr[i] >> shift) & (kRadix - 1);
       ull_tmp[--count[digit]] = ull_arr[i];
     }
 
@@ -164,9 +164,9 @@ void KrymovaKLsdSortMergeDoubleSTL::LSDSortDoubleSequential(double *arr, int siz
 }
 
 void KrymovaKLsdSortMergeDoubleSTL::LSDSortDoubleParallel(double *arr, int size, int num_threads) {
-  constexpr int k_bits_per_pass = 8;
-  constexpr int k_radix = 1 << k_bits_per_pass;
-  constexpr int k_passes = sizeof(double);
+  constexpr int kBitsPerPass = 8;
+  constexpr int kRadix = 1 << kBitsPerPass;
+  constexpr int kPasses = sizeof(double);
 
   if (size <= 1) {
     return;
@@ -184,11 +184,11 @@ void KrymovaKLsdSortMergeDoubleSTL::LSDSortDoubleParallel(double *arr, int size,
     return;
   }
 
-  for (int pass = 0; pass < k_passes; ++pass) {
-    int shift = pass * k_bits_per_pass;
+  for (int pass = 0; pass < kPasses; ++pass) {
+    int shift = pass * kBitsPerPass;
 
-    std::array<std::atomic<unsigned int>, k_radix> histogram;
-    for (int digit = 0; digit < k_radix; ++digit) {
+    std::array<std::atomic<unsigned int>, kRadix> histogram;
+    for (int digit = 0; digit < kRadix; ++digit) {
       histogram[digit] = 0;
     }
 
