@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <cstring>
 #include <thread>
+#include <vector>
 
 namespace krymova_k_lsd_sort_merge_double {
 
@@ -56,16 +57,16 @@ void KrymovaKLsdSortMergeDoubleSTL::ComputeHistogramParallel(const std::vector<u
   int chunk_size = (size + num_threads - 1) / num_threads;
   std::vector<std::thread> threads;
 
-  for (int thread_id = 0; thread_id < num_threads; ++thread_id) {
-    int start = thread_id * chunk_size;
+  for (int thread_idx = 0; thread_idx < num_threads; ++thread_idx) {
+    int start = thread_idx * chunk_size;
     int end = (std::min)(start + chunk_size, size);
     if (start >= size) {
       break;
     }
 
     threads.emplace_back([&, start, end, shift]() {
-      for (int idx = start; idx < end; ++idx) {
-        unsigned int digit = (ull_arr[idx] >> shift) & 0xFF;
+      for (int index = start; index < end; ++index) {
+        unsigned int digit = (ull_arr[index] >> shift) & 0xFF;
         count[digit].fetch_add(1, std::memory_order_relaxed);
       }
     });
@@ -96,8 +97,8 @@ void KrymovaKLsdSortMergeDoubleSTL::DistributeParallel(const std::vector<uint64_
   int chunk_size = (size + num_threads - 1) / num_threads;
   std::vector<std::thread> threads;
 
-  for (int thread_id = 0; thread_id < num_threads; ++thread_id) {
-    int start = thread_id * chunk_size;
+  for (int thread_idx = 0; thread_idx < num_threads; ++thread_idx) {
+    int start = thread_idx * chunk_size;
     int end = (std::min)(start + chunk_size, size);
     if (start >= size) {
       break;
@@ -105,9 +106,9 @@ void KrymovaKLsdSortMergeDoubleSTL::DistributeParallel(const std::vector<uint64_
 
     threads.emplace_back([&, start, end, shift, offsets]() {
       std::vector<unsigned int> local_offsets = offsets;
-      for (int idx = start; idx < end; ++idx) {
-        unsigned int digit = (src[idx] >> shift) & 0xFF;
-        dst[local_offsets[digit]++] = src[idx];
+      for (int index = start; index < end; ++index) {
+        unsigned int digit = (src[index] >> shift) & 0xFF;
+        dst[local_offsets[digit]++] = src[index];
       }
     });
   }
@@ -163,13 +164,13 @@ void KrymovaKLsdSortMergeDoubleSTL::LSDSortDoubleSequential(double *arr, int siz
 }
 
 void KrymovaKLsdSortMergeDoubleSTL::LSDSortDoubleParallel(double *arr, int size, int num_threads) {
+  constexpr int k_bits_per_pass = 8;
+  constexpr int k_radix = 1 << k_bits_per_pass;
+  constexpr int k_passes = sizeof(double);
+
   if (size <= 1) {
     return;
   }
-
-  const int k_bits_per_pass = 8;
-  const int k_radix = 1 << k_bits_per_pass;
-  const int k_passes = static_cast<int>(sizeof(double)) * 8 / k_bits_per_pass;
 
   std::vector<uint64_t> ull_arr(size);
   std::vector<uint64_t> ull_tmp(size);
@@ -186,13 +187,13 @@ void KrymovaKLsdSortMergeDoubleSTL::LSDSortDoubleParallel(double *arr, int size,
   for (int pass = 0; pass < k_passes; ++pass) {
     int shift = pass * k_bits_per_pass;
 
-    std::array<std::atomic<unsigned int>, k_radix> count;
-    for (int d = 0; d < k_radix; ++d) {
-      count[d] = 0;
+    std::array<std::atomic<unsigned int>, k_radix> histogram;
+    for (int digit = 0; digit < k_radix; ++digit) {
+      histogram[digit] = 0;
     }
 
-    ComputeHistogramParallel(ull_arr, shift, num_threads, count);
-    std::vector<unsigned int> offsets = BuildOffsetsFromHistogram(count);
+    ComputeHistogramParallel(ull_arr, shift, num_threads, histogram);
+    std::vector<unsigned int> offsets = BuildOffsetsFromHistogram(histogram);
     DistributeParallel(ull_arr, ull_tmp, offsets, shift, num_threads);
 
     ull_arr.swap(ull_tmp);
@@ -207,47 +208,47 @@ void KrymovaKLsdSortMergeDoubleSTL::MergeSections(double *left, const double *ri
   std::vector<double> temp(left_size);
   std::copy(left, left + left_size, temp.begin());
 
-  int left_index = 0;
-  int right_index = 0;
-  int dest_index = 0;
+  int left_idx = 0;
+  int right_idx = 0;
+  int dest_idx = 0;
 
-  while (left_index < left_size && right_index < right_size) {
-    if (temp[left_index] <= right[right_index]) {
-      left[dest_index++] = temp[left_index++];
+  while (left_idx < left_size && right_idx < right_size) {
+    if (temp[left_idx] <= right[right_idx]) {
+      left[dest_idx++] = temp[left_idx++];
     } else {
-      left[dest_index++] = right[right_index++];
+      left[dest_idx++] = right[right_idx++];
     }
   }
 
-  while (left_index < left_size) {
-    left[dest_index++] = temp[left_index++];
+  while (left_idx < left_size) {
+    left[dest_idx++] = temp[left_idx++];
   }
 }
 
 void KrymovaKLsdSortMergeDoubleSTL::SortSectionsParallel(double *arr, int size, int portion, int num_threads) {
   int num_blocks = (size + portion - 1) / portion;
-  int num_threads_used = (std::min)(num_threads, num_blocks);
+  int used_threads = (std::min)(num_threads, num_blocks);
 
-  if (num_threads_used <= 1) {
-    for (int start = 0; start < size; start += portion) {
-      int current_size = (std::min)(portion, size - start);
-      LSDSortDoubleSequential(arr + start, current_size);
+  if (used_threads <= 1) {
+    for (int offset = 0; offset < size; offset += portion) {
+      int curr_size = (std::min)(portion, size - offset);
+      LSDSortDoubleSequential(arr + offset, curr_size);
     }
     return;
   }
 
   std::vector<std::thread> threads;
-  int blocks_per_thread = (num_blocks + num_threads_used - 1) / num_threads_used;
+  int blocks_per_thread = (num_blocks + used_threads - 1) / used_threads;
 
-  for (int thread_id = 0; thread_id < num_threads_used; ++thread_id) {
-    int start_block = thread_id * blocks_per_thread;
+  for (int thread_idx = 0; thread_idx < used_threads; ++thread_idx) {
+    int start_block = thread_idx * blocks_per_thread;
     int end_block = (std::min)(start_block + blocks_per_thread, num_blocks);
 
     threads.emplace_back([&, start_block, end_block, portion, size, arr]() {
       for (int block = start_block; block < end_block; ++block) {
         int start_pos = block * portion;
-        int current_size = (std::min)(portion, size - start_pos);
-        LSDSortDoubleSequential(arr + start_pos, current_size);
+        int curr_size = (std::min)(portion, size - start_pos);
+        LSDSortDoubleSequential(arr + start_pos, curr_size);
       }
     });
   }
