@@ -69,7 +69,8 @@ void KrymovaKLsdSortMergeDoubleSTL::ComputeHistogramParallel(const std::vector<u
     threads.emplace_back([&, start, end, shift]() {
       for (int idx = start; idx < end; ++idx) {
         unsigned int digit = (ull_arr[idx] >> shift) & 0xFF;
-        count[digit].fetch_add(1, std::memory_order_relaxed);
+        auto &atomic_ref = count[digit];
+        atomic_ref.fetch_add(1, std::memory_order_relaxed);
       }
     });
   }
@@ -86,7 +87,8 @@ std::vector<unsigned int> KrymovaKLsdSortMergeDoubleSTL::BuildOffsetsFromHistogr
 
   for (int digit = 0; digit < 256; ++digit) {
     offsets[digit] = total;
-    total += count[digit].load();
+    const auto &atomic_ref = count[digit];
+    total += atomic_ref.load();
   }
 
   return offsets;
