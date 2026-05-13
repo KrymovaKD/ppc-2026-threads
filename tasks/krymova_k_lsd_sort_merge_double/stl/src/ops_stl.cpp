@@ -67,8 +67,7 @@ void KrymovaKLsdSortMergeDoubleSTL::ComputeHistogramParallel(const std::vector<u
     threads.emplace_back([&, start, end, shift]() {
       for (int idx = start; idx < end; ++idx) {
         unsigned int digit = (ull_arr[idx] >> shift) & 0xFF;
-        // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-constant-array-index)
-        count[digit].fetch_add(1, std::memory_order_relaxed);
+        count[static_cast<size_t>(digit)].fetch_add(1, std::memory_order_relaxed);
       }
     });
   }
@@ -85,8 +84,7 @@ std::vector<unsigned int> KrymovaKLsdSortMergeDoubleSTL::BuildOffsetsFromHistogr
 
   for (int digit = 0; digit < 256; ++digit) {
     offsets[digit] = total;
-    // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-constant-array-index)
-    total += count[digit].load();
+    total += count[static_cast<size_t>(digit)].load();
   }
 
   return offsets;
@@ -141,7 +139,6 @@ void KrymovaKLsdSortMergeDoubleSTL::LSDSortDoubleSequential(double *arr, int siz
   for (int pass = 0; pass < k_passes; ++pass) {
     int shift = pass * k_bits_per_pass;
 
-    // NOLINTNEXTLINE(modernize-use-ranges)
     std::fill(count.begin(), count.end(), 0U);
 
     for (int i = 0; i < size; ++i) {
@@ -192,7 +189,6 @@ void KrymovaKLsdSortMergeDoubleSTL::LSDSortDoubleParallel(double *arr, int size,
 
     std::array<std::atomic<unsigned int>, k_radix> count;
     for (int digit_idx = 0; digit_idx < k_radix; ++digit_idx) {
-      // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-constant-array-index)
       count[digit_idx] = 0;
     }
 
