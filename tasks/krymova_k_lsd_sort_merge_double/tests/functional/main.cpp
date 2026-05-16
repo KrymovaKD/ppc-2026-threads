@@ -116,7 +116,7 @@ const std::array<TestType, 13> kTestParam = {std::make_tuple(1, "single"),
                                              std::make_tuple(100, "mixed"),
                                              std::make_tuple(100000, "random_huge")};
 
-const auto kTestTasksList = std::tuple_cat(ppc::util::AddFuncTask<KrymovaKLsdSortMergeDoubleSTL, InType>(
+const auto kTestTasksList = std::tuple_cat(pc::util::AddFuncTask<KrymovaKLsdSortMergeDoubleSTL, InType>(
                                                kTestParam, PPC_SETTINGS_krymova_k_lsd_sort_merge_double),
                                            ppc::util::AddFuncTask<KrymovaKLsdSortMergeDoubleOMP, InType>(
                                                kTestParam, PPC_SETTINGS_krymova_k_lsd_sort_merge_double),
