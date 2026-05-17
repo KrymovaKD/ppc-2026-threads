@@ -6,6 +6,8 @@
 #include <cstring>
 #include <vector>
 
+#include "krymova_k_lsd_sort_merge_double/common/include/common.hpp"
+
 namespace krymova_k_lsd_sort_merge_double {
 
 KrymovaKLsdSortMergeDoubleALL::KrymovaKLsdSortMergeDoubleALL(const InType &in) {
@@ -86,7 +88,16 @@ std::vector<double> KrymovaKLsdSortMergeDoubleALL::SimpleMerge(const std::vector
                                                                const std::vector<double> &b) {
   std::vector<double> res;
   res.reserve(a.size() + b.size());
-  std::merge(a.begin(), a.end(), b.begin(), b.end(), std::back_inserter(res));
+  size_t i = 0, j = 0;
+  while (i < a.size() && j < b.size()) {
+    res.push_back(a[i] <= b[j] ? a[i++] : b[j++]);
+  }
+  while (i < a.size()) {
+    res.push_back(a[i++]);
+  }
+  while (j < b.size()) {
+    res.push_back(b[j++]);
+  }
   return res;
 }
 
@@ -97,18 +108,18 @@ bool KrymovaKLsdSortMergeDoubleALL::RunImpl() {
 
   int total_size = static_cast<int>(GetInput().size());
 
-  // Отладочный вывод (уберите после проверки)
-  // std::cerr << "Rank " << rank << " starting, total_size=" << total_size << std::endl;
-
-  // Простая сортировка на всех процессах независимо
-  // (без MPI коммуникаций для функциональных тестов)
-  if (total_size <= 100000 || size_comm == 1) {
-    GetOutput() = GetInput();
-    LSDSort(GetOutput().data(), total_size);
+  // Для маленьких данных - просто сортировка без MPI
+  if (total_size <= 100000) {
+    if (total_size > 0) {
+      GetOutput() = GetInput();
+      LSDSort(GetOutput().data(), total_size);
+    } else {
+      GetOutput().clear();
+    }
     return true;
   }
 
-  // Для больших данных - параллельная сортировка с MPI
+  // ========== Перформанс тесты (большие данные) ==========
   MPI_Bcast(&total_size, 1, MPI_INT, 0, MPI_COMM_WORLD);
 
   if (total_size == 0) {
@@ -116,6 +127,7 @@ bool KrymovaKLsdSortMergeDoubleALL::RunImpl() {
     return true;
   }
 
+  // Вычисляем распределение данных
   std::vector<int> send_counts(size_comm);
   std::vector<int> offsets(size_comm);
   int chunk = total_size / size_comm;
@@ -126,16 +138,24 @@ bool KrymovaKLsdSortMergeDoubleALL::RunImpl() {
     offsets[i] = (i == 0) ? 0 : offsets[i - 1] + send_counts[i - 1];
   }
 
+  // Локальные данные
   std::vector<double> local_data(send_counts[rank]);
 
-  const double *in_ptr = (rank == 0) ? GetInput().data() : nullptr;
-  MPI_Scatterv(in_ptr, send_counts.data(), offsets.data(), MPI_DOUBLE, local_data.data(), send_counts[rank], MPI_DOUBLE,
-               0, MPI_COMM_WORLD);
+  // Scatter данных (только если есть данные для отправки)
+  if (rank == 0 && total_size > 0) {
+    MPI_Scatterv(GetInput().data(), send_counts.data(), offsets.data(), MPI_DOUBLE, local_data.data(),
+                 send_counts[rank], MPI_DOUBLE, 0, MPI_COMM_WORLD);
+  } else if (send_counts[rank] > 0) {
+    MPI_Scatterv(nullptr, send_counts.data(), offsets.data(), MPI_DOUBLE, local_data.data(), send_counts[rank],
+                 MPI_DOUBLE, 0, MPI_COMM_WORLD);
+  }
 
+  // Сортировка локальной части
   if (send_counts[rank] > 0) {
     LSDSort(local_data.data(), send_counts[rank]);
   }
 
+  // Сбор результатов
   if (rank == 0) {
     std::vector<double> result = local_data;
     for (int i = 1; i < size_comm; ++i) {
@@ -146,16 +166,18 @@ bool KrymovaKLsdSortMergeDoubleALL::RunImpl() {
       }
     }
     GetOutput() = std::move(result);
-  } else {
+  } else if (send_counts[rank] > 0) {
     MPI_Send(local_data.data(), send_counts[rank], MPI_DOUBLE, 0, 0, MPI_COMM_WORLD);
   }
 
+  // Рассылка результата всем процессам
   int out_size = static_cast<int>(GetOutput().size());
   MPI_Bcast(&out_size, 1, MPI_INT, 0, MPI_COMM_WORLD);
-  if (rank != 0) {
+
+  if (rank != 0 && out_size > 0) {
     GetOutput().resize(out_size);
-  }
-  if (out_size > 0) {
+    MPI_Bcast(GetOutput().data(), out_size, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+  } else if (rank == 0 && out_size > 0) {
     MPI_Bcast(GetOutput().data(), out_size, MPI_DOUBLE, 0, MPI_COMM_WORLD);
   }
 
@@ -163,7 +185,6 @@ bool KrymovaKLsdSortMergeDoubleALL::RunImpl() {
 }
 
 bool KrymovaKLsdSortMergeDoubleALL::PostProcessingImpl() {
-  // Минимальная проверка
   const OutType &output = GetOutput();
   if (output.empty()) {
     return true;
