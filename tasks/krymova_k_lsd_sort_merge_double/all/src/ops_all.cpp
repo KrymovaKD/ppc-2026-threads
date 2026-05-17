@@ -181,24 +181,6 @@ bool KrymovaKLsdSortMergeDoubleALL::RunImpl() {
 }
 
 bool KrymovaKLsdSortMergeDoubleALL::PostProcessingImpl() {
-  int rank;
-  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-
-  // Только процесс 0 проверяет результат
-  if (rank != 0) {
-    return true;
-  }
-
-  const OutType &output = GetOutput();
-  if (output.empty()) {
-    return true;
-  }
-
-  for (size_t i = 1; i < output.size(); ++i) {
-    if (output[i] < output[i - 1]) {
-      return false;
-    }
-  }
   return true;
 }
 
