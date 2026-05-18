@@ -3,7 +3,7 @@
 #include <mpi.h>
 
 #include <algorithm>
-#include <cstdint>  
+#include <cstdint>
 #include <cstring>
 #include <utility>
 #include <vector>
@@ -114,9 +114,8 @@ bool KrymovaKLsdSortMergeDoubleALL::RunSmallDataset(int total_size) {
   return true;
 }
 
-void KrymovaKLsdSortMergeDoubleALL::ComputeDistribution(int total_size, int size_comm, 
-                                                         std::vector<int>& send_counts, 
-                                                         std::vector<int>& offsets) {
+void KrymovaKLsdSortMergeDoubleALL::ComputeDistribution(int total_size, int size_comm, std::vector<int> &send_counts,
+                                                        std::vector<int> &offsets) {
   int chunk = total_size / size_comm;
   int rem = total_size % size_comm;
 
@@ -126,22 +125,19 @@ void KrymovaKLsdSortMergeDoubleALL::ComputeDistribution(int total_size, int size
   }
 }
 
-void KrymovaKLsdSortMergeDoubleALL::ScatterData(int rank, 
-                                                 const std::vector<int>& send_counts,
-                                                 const std::vector<int>& offsets, 
-                                                 std::vector<double>& local_data) {
+void KrymovaKLsdSortMergeDoubleALL::ScatterData(int rank, const std::vector<int> &send_counts,
+                                                const std::vector<int> &offsets, std::vector<double> &local_data) {
   if (rank == 0) {
-    MPI_Scatterv(GetInput().data(), send_counts.data(), offsets.data(), MPI_DOUBLE, 
-                 local_data.data(), send_counts[rank], MPI_DOUBLE, 0, MPI_COMM_WORLD);
+    MPI_Scatterv(GetInput().data(), send_counts.data(), offsets.data(), MPI_DOUBLE, local_data.data(),
+                 send_counts[rank], MPI_DOUBLE, 0, MPI_COMM_WORLD);
   } else if (send_counts[rank] > 0) {
-    MPI_Scatterv(nullptr, send_counts.data(), offsets.data(), MPI_DOUBLE, 
-                 local_data.data(), send_counts[rank], MPI_DOUBLE, 0, MPI_COMM_WORLD);
+    MPI_Scatterv(nullptr, send_counts.data(), offsets.data(), MPI_DOUBLE, local_data.data(), send_counts[rank],
+                 MPI_DOUBLE, 0, MPI_COMM_WORLD);
   }
 }
 
-void KrymovaKLsdSortMergeDoubleALL::GatherResults(int rank, int size_comm, 
-                                                   const std::vector<int>& send_counts,
-                                                   std::vector<double>& local_data) {
+void KrymovaKLsdSortMergeDoubleALL::GatherResults(int rank, int size_comm, const std::vector<int> &send_counts,
+                                                  std::vector<double> &local_data) {
   if (rank == 0) {
     std::vector<double> result = local_data;
     for (int i = 1; i < size_comm; ++i) {
