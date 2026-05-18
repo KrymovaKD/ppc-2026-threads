@@ -39,8 +39,7 @@ class KrymovaKFuncTests : public ppc::util::BaseRunFuncTests<InType, OutType, Te
     if (type == "single") {
       input_data_.resize(1);
       input_data_[0] = 42.0;
-    } else if (type == "random_small" || type == "random_medium" || type == "random_large" ||
-               type == "random_very_large" || type == "random_huge") {
+    } else if (type == "random") {
       std::uniform_real_distribution<double> dist(-1000.0, 1000.0);
       for (int i = 0; i < size; ++i) {
         input_data_[i] = dist(gen);
@@ -55,13 +54,8 @@ class KrymovaKFuncTests : public ppc::util::BaseRunFuncTests<InType, OutType, Te
       }
     } else if (type == "constant") {
       std::ranges::fill(input_data_, 42.0);
-    } else if (type == "negative" || type == "negative_large") {
+    } else if (type == "negative") {
       std::uniform_real_distribution<double> dist(-1000.0, -1.0);
-      for (int i = 0; i < size; ++i) {
-        input_data_[i] = dist(gen);
-      }
-    } else if (type == "mixed") {
-      std::uniform_real_distribution<double> dist(-1000.0, 1000.0);
       for (int i = 0; i < size; ++i) {
         input_data_[i] = dist(gen);
       }
@@ -69,23 +63,24 @@ class KrymovaKFuncTests : public ppc::util::BaseRunFuncTests<InType, OutType, Te
   }
 
   bool CheckTestOutputData(OutType &output_data) final {
-    if (input_data_.size() != output_data.size()) {
-      return false;
-    }
-
     for (size_t i = 1; i < output_data.size(); ++i) {
       if (output_data[i] < output_data[i - 1]) {
         return false;
       }
     }
 
+    if (input_data_.size() != output_data.size()) {
+      return false;
+    }
+
     if (!input_data_.empty() && !output_data.empty()) {
       OutType input_copy = input_data_;
       const OutType &output_copy = output_data;
+
       std::ranges::sort(input_copy);
 
       for (size_t i = 0; i < input_copy.size(); ++i) {
-        if (std::abs(input_copy[i] - output_copy[i]) > 1e-9) {
+        if (std::abs(input_copy[i] - output_copy[i]) > 1e-10) {
           return false;
         }
       }
@@ -134,6 +129,7 @@ const auto kTestTasksList = std::tuple_cat(ppc::util::AddFuncTask<KrymovaKLsdSor
                                                kTestParam, PPC_SETTINGS_krymova_k_lsd_sort_merge_double));
 
 const auto kGtestValues = ppc::util::ExpandToValues(kTestTasksList);
+
 const auto kPerfTestName = KrymovaKFuncTests::PrintFuncTestName<KrymovaKFuncTests>;
 
 INSTANTIATE_TEST_SUITE_P(LsdSortMergeTests, KrymovaKFuncTests, kGtestValues, kPerfTestName);

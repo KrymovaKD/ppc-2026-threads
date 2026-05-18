@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cstring>
+#include <utility>
 #include <vector>
 
 #include "krymova_k_lsd_sort_merge_double/common/include/common.hpp"
@@ -25,18 +26,18 @@ bool KrymovaKLsdSortMergeDoubleALL::PreProcessingImpl() {
 }
 
 uint64_t KrymovaKLsdSortMergeDoubleALL::DoubleToULL(double d) {
-  uint64_t ull;
+  uint64_t ull = 0U;
   std::memcpy(&ull, &d, sizeof(double));
-  return (ull & 0x8000000000000000ULL) ? ~ull : (ull | 0x8000000000000000ULL);
+  return (ull & 0x8000000000000000ULL) != 0U ? ~ull : (ull | 0x8000000000000000ULL);
 }
 
 double KrymovaKLsdSortMergeDoubleALL::ULLToDouble(uint64_t ull) {
-  if (ull & 0x8000000000000000ULL) {
+  if ((ull & 0x8000000000000000ULL) != 0U) {
     ull &= 0x7FFFFFFFFFFFFFFFULL;
   } else {
     ull = ~ull;
   }
-  double d;
+  double d = 0.0;
   std::memcpy(&d, &ull, sizeof(double));
   return d;
 }
@@ -60,7 +61,7 @@ void KrymovaKLsdSortMergeDoubleALL::LSDSort(double *arr, int size) {
 
   for (int pass = 0; pass < k_passes; ++pass) {
     int shift = pass * k_bits_per_pass;
-    std::fill(count.begin(), count.end(), 0U);
+    std::ranges::fill(count, 0U);
 
     for (int i = 0; i < size; ++i) {
       unsigned int digit = (ull_arr[i] >> shift) & (k_radix - 1);
@@ -88,7 +89,8 @@ std::vector<double> KrymovaKLsdSortMergeDoubleALL::SimpleMerge(const std::vector
                                                                const std::vector<double> &b) {
   std::vector<double> res;
   res.reserve(a.size() + b.size());
-  size_t i = 0, j = 0;
+  size_t i = 0;
+  size_t j = 0;
   while (i < a.size() && j < b.size()) {
     res.push_back(a[i] <= b[j] ? a[i++] : b[j++]);
   }
@@ -102,7 +104,8 @@ std::vector<double> KrymovaKLsdSortMergeDoubleALL::SimpleMerge(const std::vector
 }
 
 bool KrymovaKLsdSortMergeDoubleALL::RunImpl() {
-  int rank, size_comm;
+  int rank = 0;
+  int size_comm = 0;
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
   MPI_Comm_size(MPI_COMM_WORLD, &size_comm);
 
