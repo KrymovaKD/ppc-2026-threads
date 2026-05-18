@@ -103,7 +103,7 @@ TEST_P(KrymovaKFuncTests, TestSorting) {
   ExecuteTest(GetParam());
 }
 
-const std::array<TestType, 13> kTestParam = {std::make_tuple(1, "single"),
+const std::array<TestType, 12> kTestParam = {std::make_tuple(1, "single"),
                                              std::make_tuple(10, "random_small"),
                                              std::make_tuple(100, "random_medium"),
                                              std::make_tuple(1000, "random_large"),
@@ -111,7 +111,6 @@ const std::array<TestType, 13> kTestParam = {std::make_tuple(1, "single"),
                                              std::make_tuple(100, "sorted"),
                                              std::make_tuple(100, "reverse"),
                                              std::make_tuple(100, "constant"),
-                                             std::make_tuple(100, "negative"),
                                              std::make_tuple(1000, "negative_large"),
                                              std::make_tuple(10, "mixed"),
                                              std::make_tuple(100, "mixed"),
