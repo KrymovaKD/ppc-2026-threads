@@ -63,7 +63,7 @@ void KrymovaKLsdSortMergeDoubleALL::LSDSort(double *arr, int size) {
 
   for (int pass = 0; pass < k_passes; ++pass) {
     int shift = pass * k_bits_per_pass;
-    std::fill(count.begin(), count.end(), 0U);
+    std::ranges::fill(count.begin(), count.end(), 0U);
 
     for (int i = 0; i < size; ++i) {
       unsigned int digit = (ull_arr[static_cast<size_t>(i)] >> shift) & (k_radix - 1);
