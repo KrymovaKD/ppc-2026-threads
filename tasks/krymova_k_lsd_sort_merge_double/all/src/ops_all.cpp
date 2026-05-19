@@ -1,7 +1,7 @@
 #include "krymova_k_lsd_sort_merge_double/all/include/ops_all.hpp"
 
 #include <mpi.h>
-#include <omp.h>  // ДОБАВИТЬ ЭТУ СТРОКУ
+#include <omp.h>
 
 #include <algorithm>
 #include <cstdint>
@@ -57,8 +57,8 @@ void KrymovaKLsdSortMergeDoubleALL::LSDSort(double *arr, int size) {
   std::vector<uint64_t> ull_tmp(size);
   std::vector<unsigned int> count(k_radix, 0U);
 
-// Параллельное преобразование double -> uint64_t (ДОБАВИТЬ ПРАГМУ)
-#pragma omp parallel for
+// Параллельное преобразование double -> uint64_t
+#pragma omp parallel for default(none) shared(ull_arr, arr, size)
   for (int i = 0; i < size; ++i) {
     ull_arr[i] = DoubleToULL(arr[i]);
   }
@@ -84,8 +84,8 @@ void KrymovaKLsdSortMergeDoubleALL::LSDSort(double *arr, int size) {
     ull_arr.swap(ull_tmp);
   }
 
-// Параллельное преобразование обратно (ДОБАВИТЬ ПРАГМУ)
-#pragma omp parallel for
+// Параллельное преобразование обратно
+#pragma omp parallel for default(none) shared(arr, ull_arr, size)
   for (int i = 0; i < size; ++i) {
     arr[i] = ULLToDouble(ull_arr[i]);
   }
