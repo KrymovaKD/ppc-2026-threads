@@ -1,9 +1,9 @@
 #include "krymova_k_lsd_sort_merge_double/all/include/ops_all.hpp"
 
 #include <mpi.h>
+#include <omp.h>  // ДОБАВИТЬ ЭТУ СТРОКУ
 
 #include <algorithm>
-#include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <utility>
@@ -53,37 +53,41 @@ void KrymovaKLsdSortMergeDoubleALL::LSDSort(double *arr, int size) {
   const int k_radix = 1 << k_bits_per_pass;
   const int k_passes = 8;
 
-  std::vector<uint64_t> ull_arr(static_cast<size_t>(size));
-  std::vector<uint64_t> ull_tmp(static_cast<size_t>(size));
-  std::vector<unsigned int> count(static_cast<size_t>(k_radix), 0U);
+  std::vector<uint64_t> ull_arr(size);
+  std::vector<uint64_t> ull_tmp(size);
+  std::vector<unsigned int> count(k_radix, 0U);
 
+// Параллельное преобразование double -> uint64_t (ДОБАВИТЬ ПРАГМУ)
+#pragma omp parallel for
   for (int i = 0; i < size; ++i) {
-    ull_arr[static_cast<size_t>(i)] = DoubleToULL(arr[i]);
+    ull_arr[i] = DoubleToULL(arr[i]);
   }
 
   for (int pass = 0; pass < k_passes; ++pass) {
     int shift = pass * k_bits_per_pass;
-    std::ranges::fill(count.begin(), count.end(), 0U);
+    std::ranges::fill(count, 0U);
 
     for (int i = 0; i < size; ++i) {
-      unsigned int digit = (ull_arr[static_cast<size_t>(i)] >> shift) & (k_radix - 1);
+      unsigned int digit = (ull_arr[i] >> shift) & (k_radix - 1);
       ++count[digit];
     }
 
     for (int i = 1; i < k_radix; ++i) {
-      count[static_cast<size_t>(i)] += count[static_cast<size_t>(i - 1)];
+      count[i] += count[i - 1];
     }
 
     for (int i = size - 1; i >= 0; --i) {
-      unsigned int digit = (ull_arr[static_cast<size_t>(i)] >> shift) & (k_radix - 1);
-      ull_tmp[static_cast<size_t>(--count[digit])] = ull_arr[static_cast<size_t>(i)];
+      unsigned int digit = (ull_arr[i] >> shift) & (k_radix - 1);
+      ull_tmp[--count[digit]] = ull_arr[i];
     }
 
     ull_arr.swap(ull_tmp);
   }
 
+// Параллельное преобразование обратно (ДОБАВИТЬ ПРАГМУ)
+#pragma omp parallel for
   for (int i = 0; i < size; ++i) {
-    arr[i] = ULLToDouble(ull_arr[static_cast<size_t>(i)]);
+    arr[i] = ULLToDouble(ull_arr[i]);
   }
 }
 
@@ -94,21 +98,13 @@ std::vector<double> KrymovaKLsdSortMergeDoubleALL::SimpleMerge(const std::vector
   size_t i = 0;
   size_t j = 0;
   while (i < a.size() && j < b.size()) {
-    if (a[i] <= b[j]) {
-      res.push_back(a[i]);
-      ++i;
-    } else {
-      res.push_back(b[j]);
-      ++j;
-    }
+    res.push_back(a[i] <= b[j] ? a[i++] : b[j++]);
   }
   while (i < a.size()) {
-    res.push_back(a[i]);
-    ++i;
+    res.push_back(a[i++]);
   }
   while (j < b.size()) {
-    res.push_back(b[j]);
-    ++j;
+    res.push_back(b[j++]);
   }
   return res;
 }
@@ -129,55 +125,36 @@ void KrymovaKLsdSortMergeDoubleALL::ComputeDistribution(int total_size, int size
   int rem = total_size % size_comm;
 
   for (int i = 0; i < size_comm; ++i) {
-    send_counts[static_cast<size_t>(i)] = chunk + (i < rem ? 1 : 0);
-    if (i == 0) {
-      offsets[0] = 0;
-    } else {
-      offsets[static_cast<size_t>(i)] = offsets[static_cast<size_t>(i - 1)] + send_counts[static_cast<size_t>(i - 1)];
-    }
+    send_counts[i] = chunk + (i < rem ? 1 : 0);
+    offsets[i] = (i == 0) ? 0 : offsets[i - 1] + send_counts[i - 1];
   }
 }
 
 void KrymovaKLsdSortMergeDoubleALL::ScatterData(int rank, const std::vector<int> &send_counts,
                                                 const std::vector<int> &offsets, std::vector<double> &local_data) {
-  const int local_size = send_counts[static_cast<size_t>(rank)];
-
-  if (local_size == 0) {
-    return;
-  }
-
   if (rank == 0) {
-    MPI_Scatterv(GetInput().data(), send_counts.data(), offsets.data(), MPI_DOUBLE, local_data.data(), local_size,
+    MPI_Scatterv(GetInput().data(), send_counts.data(), offsets.data(), MPI_DOUBLE, local_data.data(),
+                 send_counts[rank], MPI_DOUBLE, 0, MPI_COMM_WORLD);
+  } else if (send_counts[rank] > 0) {
+    MPI_Scatterv(nullptr, send_counts.data(), offsets.data(), MPI_DOUBLE, local_data.data(), send_counts[rank],
                  MPI_DOUBLE, 0, MPI_COMM_WORLD);
-  } else {
-    MPI_Scatterv(nullptr, send_counts.data(), offsets.data(), MPI_DOUBLE, local_data.data(), local_size, MPI_DOUBLE, 0,
-                 MPI_COMM_WORLD);
   }
 }
 
 void KrymovaKLsdSortMergeDoubleALL::GatherResults(int rank, int size_comm, const std::vector<int> &send_counts,
                                                   std::vector<double> &local_data) {
   if (rank == 0) {
-    std::vector<double> result;
-    for (int i = 0; i < size_comm; ++i) {
-      const int sz = send_counts[static_cast<size_t>(i)];
-      if (sz == 0) {
-        continue;
-      }
-      if (i == 0) {
-        result = local_data;
-      } else {
-        std::vector<double> recv_buf(static_cast<size_t>(sz));
-        MPI_Recv(recv_buf.data(), sz, MPI_DOUBLE, i, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+    std::vector<double> result = local_data;
+    for (int i = 1; i < size_comm; ++i) {
+      if (send_counts[i] > 0) {
+        std::vector<double> recv_buf(send_counts[i]);
+        MPI_Recv(recv_buf.data(), send_counts[i], MPI_DOUBLE, i, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
         result = SimpleMerge(result, recv_buf);
       }
     }
     GetOutput() = std::move(result);
-  } else {
-    const int local_size = send_counts[static_cast<size_t>(rank)];
-    if (local_size > 0) {
-      MPI_Send(local_data.data(), local_size, MPI_DOUBLE, 0, 0, MPI_COMM_WORLD);
-    }
+  } else if (send_counts[rank] > 0) {
+    MPI_Send(local_data.data(), send_counts[rank], MPI_DOUBLE, 0, 0, MPI_COMM_WORLD);
   }
 }
 
@@ -185,19 +162,10 @@ void KrymovaKLsdSortMergeDoubleALL::BroadcastResult(int rank) {
   int out_size = static_cast<int>(GetOutput().size());
   MPI_Bcast(&out_size, 1, MPI_INT, 0, MPI_COMM_WORLD);
 
-  if (out_size <= 0) {
-    if (rank != 0) {
-      GetOutput().clear();
-    }
-    return;
-  }
-
-  if (rank != 0) {
-    GetOutput().resize(static_cast<size_t>(out_size));
-  }
-
-  // Важно: проверяем, что указатель не nullptr
-  if (out_size > 0 && GetOutput().data() != nullptr) {
+  if ((rank != 0) && (out_size > 0)) {
+    GetOutput().resize(out_size);
+    MPI_Bcast(GetOutput().data(), out_size, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+  } else if ((rank == 0) && (out_size > 0)) {
     MPI_Bcast(GetOutput().data(), out_size, MPI_DOUBLE, 0, MPI_COMM_WORLD);
   }
 }
@@ -210,28 +178,6 @@ bool KrymovaKLsdSortMergeDoubleALL::RunImpl() {
 
   int total_size = static_cast<int>(GetInput().size());
 
-  // Для маленьких данных - последовательная сортировка на rank 0
-  if (total_size <= 100000) {
-    if (rank == 0) {
-      GetOutput() = GetInput();
-      LSDSort(GetOutput().data(), total_size);
-      int out_size = static_cast<int>(GetOutput().size());
-      MPI_Bcast(&out_size, 1, MPI_INT, 0, MPI_COMM_WORLD);
-      if (out_size > 0) {
-        MPI_Bcast(GetOutput().data(), out_size, MPI_DOUBLE, 0, MPI_COMM_WORLD);
-      }
-    } else {
-      int out_size = 0;
-      MPI_Bcast(&out_size, 1, MPI_INT, 0, MPI_COMM_WORLD);
-      if (out_size > 0) {
-        GetOutput().resize(static_cast<size_t>(out_size));
-        MPI_Bcast(GetOutput().data(), out_size, MPI_DOUBLE, 0, MPI_COMM_WORLD);
-      }
-    }
-    return true;
-  }
-
-  // MPI версия для больших данных
   MPI_Bcast(&total_size, 1, MPI_INT, 0, MPI_COMM_WORLD);
 
   if (total_size == 0) {
@@ -239,21 +185,16 @@ bool KrymovaKLsdSortMergeDoubleALL::RunImpl() {
     return true;
   }
 
-  std::vector<int> send_counts(static_cast<size_t>(size_comm));
-  std::vector<int> offsets(static_cast<size_t>(size_comm));
+  std::vector<int> send_counts(size_comm);
+  std::vector<int> offsets(size_comm);
   ComputeDistribution(total_size, size_comm, send_counts, offsets);
 
-  const int local_size = send_counts[static_cast<size_t>(rank)];
-  std::vector<double> local_data;
-
-  if (local_size > 0) {
-    local_data.resize(static_cast<size_t>(local_size));
-  }
+  std::vector<double> local_data(send_counts[rank]);
 
   ScatterData(rank, send_counts, offsets, local_data);
 
-  if (local_size > 0) {
-    LSDSort(local_data.data(), local_size);
+  if (send_counts[rank] > 0) {
+    LSDSort(local_data.data(), send_counts[rank]);
   }
 
   GatherResults(rank, size_comm, send_counts, local_data);
