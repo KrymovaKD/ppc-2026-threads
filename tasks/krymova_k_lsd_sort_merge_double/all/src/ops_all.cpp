@@ -186,13 +186,20 @@ void KrymovaKLsdSortMergeDoubleALL::BroadcastResult(int rank) {
   MPI_Bcast(&out_size, 1, MPI_INT, 0, MPI_COMM_WORLD);
 
   if (out_size <= 0) {
+    if (rank != 0) {
+      GetOutput().clear();
+    }
     return;
   }
 
   if (rank != 0) {
     GetOutput().resize(static_cast<size_t>(out_size));
   }
-  MPI_Bcast(GetOutput().data(), out_size, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+
+  // Важно: проверяем, что указатель не nullptr
+  if (out_size > 0 && GetOutput().data() != nullptr) {
+    MPI_Bcast(GetOutput().data(), out_size, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+  }
 }
 
 bool KrymovaKLsdSortMergeDoubleALL::RunImpl() {
